@@ -136,7 +136,25 @@ about eight seconds.
   `sound` or pair it with `dsh-macos-notifications` if you want more than motion.
 - macOS "Reduce motion" and third-party Dock-animation tweaks can suppress the
   bounce animation; the plugin cannot detect that. The tile still appears.
+- macOS throttles very long `critical` requests; lower `timeoutSeconds` (10–15 s) if
+  you want a shorter, unthrottled burst.
+- The helper is ad-hoc signed, not notarized. A plugin installed from a local
+  checkout or a `git` dependency is not quarantined and launches fine; if a zip
+  download did add the quarantine attribute, run
+  `xattr -dr com.apple.quarantine "bin/DSH Attention.app"` once.
 - If the Harness window is in the foreground, by design nothing bounces.
+
+## Troubleshooting
+
+- **No icon appears at all** — run `node tools/self-check.mjs`; it reports whether the
+  helper launched at all and prints the tail of `runtime/helper.log`.
+- **Icon appears but never bounces** — check "Reduce motion" in System Settings →
+  Accessibility, and Dock animation tweaks. The beacon log still shows
+  `requestUserAttention(...) -> id=0`, which means the request was accepted
+  (return value `0` is a valid first request id — `-1` would mean the app was active).
+- **The beacon appears while you are already looking at Harness** — set
+  `skipWhenActive: true` (the default) and make sure `activeBundleIds` names the
+  right app; browser users must add their browser's bundle id.
 
 ## Files
 
