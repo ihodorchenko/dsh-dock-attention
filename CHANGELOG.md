@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1 — 2026-10-30
+
+Packaging release; no behavior changes.
+
+- The published package now also ships `tools/`, `tests/`, `src/`, `docs/` and
+  `CHANGELOG.md`, so `node tools/self-check.mjs` and the helper build script work from
+  an installed plugin directory too.
 ## 1.0.0 — 2026-10-30
 
 First public release.
