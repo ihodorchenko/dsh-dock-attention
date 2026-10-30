@@ -1,5 +1,10 @@
 # dsh-dock-attention
 
+[![License](https://img.shields.io/badge/license-MIT-4d6bfe)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%2012%2B-black)](#limitations)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-plugin-4d6bfe)](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/)
+[![Release](https://img.shields.io/github/v/release/ihodorchenko/dsh-dock-attention?color=4d6bfe)](https://github.com/ihodorchenko/dsh-dock-attention/releases)
+
 A Host plugin for **DeepSeek Harness** that bounces a Dock icon when the agent needs
 you and the Harness window is not frontmost.
 
