@@ -54,11 +54,15 @@ the event arrives within `minIntervalSeconds` of the previous one.
 
 ## Install
 
-**Plugin Manager / GitHub:**
+**Plugin Manager / CLI:**
 
-```text
-git+https://github.com/ihodorchenko/dsh-dock-attention.git
+```sh
+dsh plugin --profile desktop add "github:ihodorchenko/dsh-dock-attention"
 ```
+
+Plugin Manager also accepts the git URL
+`git+https://github.com/ihodorchenko/dsh-dock-attention.git`. A source archive is
+attached to every [release](https://github.com/ihodorchenko/dsh-dock-attention/releases).
 
 **From a local checkout:**
 
