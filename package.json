@@ -1,0 +1,56 @@
+{
+  "name": "dsh-dock-attention",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bounce a Dock icon when DeepSeek Harness needs your attention and the window is in the background.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./lib/*.js": "./lib/*.js",
+    "./icon": "./icon.svg",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "lib/",
+    "bin/",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build:helper": "bash tools/build-helper.sh",
+    "self-check": "node tools/self-check.mjs",
+    "test": "node --test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "bundle",
+    "macos",
+    "dock",
+    "attention",
+    "notifications"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ihodorchenko/dsh-dock-attention.git"
+  },
+  "homepage": "https://github.com/ihodorchenko/dsh-dock-attention#readme",
+  "bugs": {
+    "url": "https://github.com/ihodorchenko/dsh-dock-attention/issues"
+  }
+}

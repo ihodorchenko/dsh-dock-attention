@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Dock Attention",
+    "description": "Bounces a Dock icon when Harness needs you and the window is in the background."
+  }
+}

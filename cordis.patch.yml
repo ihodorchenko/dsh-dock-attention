@@ -1,0 +1,19 @@
+# Bundle layer for dsh-dock-attention.
+# Mounts the Host row that watches session events and bounces the DSH Attention
+# beacon in the Dock when the Harness window is in the background.
+- insert:
+    - id: dock-attention
+      name: dsh-dock-attention
+      config:
+        enabled: true
+        targetBundleId: com.deepseek.dsh
+        skipWhenActive: true
+        bounceOnApproval: true
+        bounceOnQuestion: true
+        bounceOnTurnEnd: true
+        mode: critical
+        repeatCount: 3
+        timeoutSeconds: 30
+        minIntervalSeconds: 3
+        sound: null
+        openUrl: 'dsh://open'
