@@ -28,16 +28,30 @@ So this plugin ships the smallest honest alternative: a native helper app,
 **DSH Attention**. When attention is needed, the Host plugin writes a request file,
 launches the helper in the background (`open -n -g`), and the helper:
 
-1. starts as a background agent, so it never steals focus;
-2. promotes itself to a regular app, which gives it a Dock tile;
-3. asks AppKit for user attention, so that tile bounces;
-4. quits — and takes its tile with it — as soon as the Harness window comes to the
+1. runs as a regular app launched with `open -g`, so it owns an ordinary Dock tile
+   without becoming frontmost;
+2. asks AppKit for user attention, so that tile bounces;
+3. quits — and takes its tile with it — as soon as the Harness window comes to the
    front, its own icon is clicked, or the time budget runs out.
 
 Clicking the bouncing tile activates Harness (or launches it, when it is not
-running). The helper needs **no** Accessibility, Automation, Screen Recording or
-Notification permissions: focus detection uses `NSWorkspace` through JXA, and the
-bounce is AppKit's own `requestUserAttention`.
+running). The tile has to belong to an ordinary app: a background agent
+(`LSUIElement`) that promotes itself to a regular app gets a Dock tile
+LaunchServices cannot reopen, so a click on it makes macOS reveal the bundle in
+Finder instead of activating the app — the click never reaches the helper. Versions
+before 1.0.2 worked that way and opened Finder instead of Harness; the beacon stays
+a plain regular app now.
+
+The helper is copied once to
+`~/Library/Application Support/dsh-dock-attention/DSH Attention.app` (quarantine
+flag stripped, ad-hoc signed, registered with LaunchServices) and launched from
+there, so its Dock tile always belongs to one stable app bundle instead of a file
+inside `node_modules`. The request and log files live next to it in `runtime/`;
+a plugin update refreshes the copy automatically.
+
+The helper needs **no** Accessibility, Automation, Screen Recording or Notification
+permissions: focus detection uses `NSWorkspace` through JXA, and the bounce is
+AppKit's own `requestUserAttention`.
 
 ## What triggers it
 
@@ -128,10 +142,11 @@ config:
 node tools/self-check.mjs
 ```
 
-The self-check compiles nothing; it launches the bundled beacon, watches it through
-`NSWorkspace`, waits for it to exit, and prints the helper log tail. Watch the Dock
-while it runs: a bouncing **DSH Attention** icon should appear and disappear after
-about eight seconds.
+The self-check compiles nothing; it installs the beacon copy, launches it, watches
+it through `NSWorkspace`, waits for it to exit, and prints the helper log tail. It
+also prints the installed location it launched from. Watch the Dock while it runs: a
+bouncing **DSH Attention** icon should appear and disappear after about eight
+seconds.
 
 ## Limitations
 
@@ -147,16 +162,22 @@ about eight seconds.
   bounce animation; the plugin cannot detect that. The tile still appears.
 - macOS throttles very long `critical` requests; lower `timeoutSeconds` (10–15 s) if
   you want a shorter, unthrottled burst.
-- The helper is ad-hoc signed, not notarized. A plugin installed from a local
-  checkout or a `git` dependency is not quarantined and launches fine; if a zip
-  download did add the quarantine attribute, run
-  `xattr -dr com.apple.quarantine "bin/DSH Attention.app"` once.
+- The helper is ad-hoc signed, not notarized. On first use the plugin copies it to
+  `~/Library/Application Support/dsh-dock-attention/` and strips the quarantine flag
+  from that copy, so `git`, local-checkout and zip installs all behave the same; no
+  manual `xattr` command is needed.
 - If the Harness window is in the foreground, by design nothing bounces.
 
 ## Troubleshooting
 
 - **No icon appears at all** — run `node tools/self-check.mjs`; it reports whether the
-  helper launched at all and prints the tail of `runtime/helper.log`.
+  helper launched at all and prints the tail of
+  `~/Library/Application Support/dsh-dock-attention/runtime/helper.log`.
+- **Clicking the icon opens Finder instead of Harness** — that is the pre-1.0.2
+  build. It started as a background agent and promoted itself to a regular app, so
+  its Dock tile could not be reopened by LaunchServices, and it also ran from inside
+  the package directory. Update to 1.0.2+: the beacon is a plain regular app launched
+  from a stable Application Support copy, so a click is an ordinary Dock activation.
 - **Icon appears but never bounces** — check "Reduce motion" in System Settings →
   Accessibility, and Dock animation tweaks. The beacon log still shows
   `requestUserAttention(...) -> id=0`, which means the request was accepted
@@ -173,7 +194,7 @@ about eight seconds.
 | `lib/attention.js` | Config normalization, event mapping, focus probe, beacon launch |
 | `bin/DSH Attention.app` | Native beacon app (universal binary, ad-hoc signed) |
 | `src/helper/main.swift` | Beacon source; `tools/build-helper.sh` rebuilds the bundle |
-| `runtime/request.json`, `runtime/helper.log` | Written at run time; git-ignored |
+| `~/Library/Application Support/dsh-dock-attention/` | Installed helper copy plus `runtime/request.json` and `runtime/helper.log`, written at run time |
 | `cordis.patch.yml` | Bundle patch that inserts the `dock-attention` row |
 | `locale/en.json`, `locale/ru.json` | Plugin Manager display metadata |
 | `icon.svg`, `docs/icon-1024.png` | Plugin icon and app icon source |
@@ -181,14 +202,15 @@ about eight seconds.
 ## Development
 
 ```sh
-node --test                        # 18 unit tests (config, event mapping, wiring)
+node --test                        # 23 unit tests (config, event mapping, wiring, helper bundle)
 bash tools/build-helper.sh         # rebuild bin/DSH Attention.app (needs Xcode CLT)
 python3 tools/render-icon.py       # optional: re-render AppIcon.icns (needs Pillow)
 ```
 
 The helper source is small enough to audit: `requestAttention`, the single-instance
 guard, the frontmost-app poll, and the click/activation forwarding are all in
-`src/helper/main.swift`.
+`src/helper/main.swift`. Keep it a regular app: the `tests/helper.test.mjs` guard
+fails if `LSUIElement` ever comes back.
 
 ## License
 

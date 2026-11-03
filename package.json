@@ -1,6 +1,6 @@
 {
   "name": "dsh-dock-attention",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "description": "Bounce a Dock icon when DeepSeek Harness needs your attention and the window is in the background.",
@@ -24,8 +24,7 @@
     "docs/icon-1024.png",
     "src/",
     "tools/",
-    "tests/",
-    "runtime/.gitkeep"
+    "tests/"
   ],
   "scripts": {
     "build:helper": "bash tools/build-helper.sh",

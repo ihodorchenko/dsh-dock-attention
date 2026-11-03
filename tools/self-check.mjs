@@ -14,7 +14,8 @@ import {
   BEACON_BUNDLE_ID,
   HELPER_APP,
   HELPER_EXECUTABLE,
-  RUNTIME_DIR,
+  HELPER_LOG_PATH,
+  ensureHelperInstalled,
   normalizeConfig,
   probe,
   launchBeacon,
@@ -45,9 +46,16 @@ function fail(message) {
 
 async function main() {
   line('dsh-dock-attention self-check')
-  line(`  helper app: ${HELPER_APP}`)
+  line(`  shipped helper: ${HELPER_APP}`)
   if (!existsSync(HELPER_APP)) fail(`helper app not found: ${HELPER_APP}`)
   if (!existsSync(HELPER_EXECUTABLE)) fail(`helper executable not found: ${HELPER_EXECUTABLE}`)
+  let launchedApp = HELPER_APP
+  try {
+    launchedApp = ensureHelperInstalled()
+  } catch (error) {
+    line(`  warning: could not install the helper copy (${error instanceof Error ? error.message : String(error)})`)
+  }
+  line(`  launches from: ${launchedApp}`)
 
   const before = await probe(config)
   line(`  frontmost app: ${before.frontBundleId || 'unknown'}`)
@@ -76,7 +84,7 @@ async function main() {
 
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
   line(`  ✓ beacon appeared in the Dock and exited after ${elapsed}s`)
-  const logPath = `${RUNTIME_DIR}/helper.log`
+  const logPath = HELPER_LOG_PATH
   if (existsSync(logPath)) {
     const lines = readFileSync(logPath, 'utf8').trim().split('\n')
     line(`  helper log tail: ${lines.slice(-2).join(' | ')}`)

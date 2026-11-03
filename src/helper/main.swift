@@ -3,13 +3,18 @@
 // DeepSeek Harness Desktop is an Electron app: the Dock tile and `app.dock.bounce()`
 // belong to the Electron main process, and a Host plugin runs in a separate Node
 // child process that cannot reach it. The only way a plugin can honestly make a
-// Dock icon bounce on macOS is to own a Dock tile — so this tiny agent app does:
+// Dock icon bounce on macOS is to own a Dock tile — so this tiny app does:
 //
-//   * it starts as a background (LSUIElement) app, so launching it never steals focus;
-//   * it promotes itself to a regular app, which gives it a Dock tile;
-//   * it asks AppKit for user attention, so the tile bounces;
+//   * it is a regular app (no LSUIElement) launched with `open -n -g`, so it owns
+//     a normal Dock tile without becoming frontmost;
+//   * it asks AppKit for user attention, so that tile bounces;
 //   * it quits as soon as the target app comes to the front, when the tile is
 //     clicked, or after the configured time budget — taking its tile with it.
+//
+// Do NOT start this app as a background agent (LSUIElement) and promote it to a
+// regular app at runtime: such a promoted tile is a Dock item LaunchServices
+// cannot reopen, so a click on it makes macOS reveal the bundle in Finder instead
+// of activating the app — the click never reaches this delegate.
 //
 // The Host plugin writes runtime/request.json next to the plugin package and
 // launches this app with `open -n -g`, so the beacon is configured out-of-band.
@@ -130,19 +135,25 @@ final class AttentionDelegate: NSObject, NSApplicationDelegate {
     private var attentionId = 0
     private var finished = false
     private var launched = false
-    private var readyAt = Date()
+    private var switching = false
+    /// How many times to re-try raising the target before quitting anyway.
+    private let activationAttempts = 4
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard admitSingleInstance() else { return }
         launched = true
-        readyAt = Date()
 
-        // A background app gets no Dock tile. Promoting to a regular app creates the
-        // tile without activating the app, so nothing steals focus.
-        let promoted = NSApp.setActivationPolicy(.regular)
-        log.write("launched pid=\(ProcessInfo.processInfo.processIdentifier) target=\(request.targetBundleId) mode=\(mode.rawValue) timeout=\(request.timeoutSeconds) repeat=\(request.repeatCount) promoted=\(promoted) active=\(NSApp.isActive)")
+        // The bundle is a regular app, so it already owns a Dock tile. Keep the
+        // policy regular even if an older Info.plist (LSUIElement) is in use: a
+        // background agent promoted here would produce a tile that LaunchServices
+        // cannot reopen, and clicking it opens Finder instead of this app.
+        if NSApp.activationPolicy() != .regular {
+            _ = NSApp.setActivationPolicy(.regular)
+        }
 
-        // The Dock registers the fresh tile a moment after the promotion; request
+        log.write("launched pid=\(ProcessInfo.processInfo.processIdentifier) target=\(request.targetBundleId) mode=\(mode.rawValue) timeout=\(request.timeoutSeconds) repeat=\(request.repeatCount) policy=\(NSApp.activationPolicy().rawValue) active=\(NSApp.isActive)")
+
+        // The Dock registers the fresh tile a moment after launch; request
         // attention once it exists, otherwise the request is silently dropped.
         Timer.scheduledTimer(withTimeInterval: 0.7, repeats: false) { [weak self] _ in
             self?.requestAttention()
@@ -198,24 +209,61 @@ final class AttentionDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Bring the target app to the front; falls back to its application URL, then to openUrl.
-    private func openTarget() {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: request.targetBundleId)
-        if let app = running.first {
-            log.write("activating target pid=\(app.processIdentifier)")
-            app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
-            return
+    /// Bring the target app to the front and disappear. This is the whole point of
+    /// the Dock tile: a click on it must land the user in DeepSeek Harness, never in
+    /// Finder or any other app.
+    private func switchToTarget(reason: String, attempt: Int = 1) {
+        guard launched, !finished else { return }
+
+        if attempt == 1 {
+            if switching { return }
+            switching = true
+            log.write("switching to target reason=\(reason)")
         }
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: request.targetBundleId) {
-            log.write("opening target at \(url.path)")
+
+        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: request.targetBundleId).first {
+            // `activateAllWindows` raises hidden or minimised target windows;
+            // ignoring other apps keeps the focus request valid while the beacon
+            // itself is the active app.
+            let activated = app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            log.write("activating target pid=\(app.processIdentifier) attempt=\(attempt) activated=\(activated)")
+            if activated {
+                finish(reason: "target-activated")
+                return
+            }
+        } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: request.targetBundleId) {
+            // The target is not running yet: let LaunchServices start it in front.
+            log.write("opening target at \(url.path) attempt=\(attempt)")
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = true
-            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in }
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { [weak self] _, error in
+                guard let self, !self.finished else { return }
+                if let error {
+                    log.write("opening target failed: \(error.localizedDescription)")
+                    self.finish(reason: "target-open-failed")
+                } else {
+                    self.finish(reason: "target-opened")
+                }
+            }
+            return
+        } else if let raw = request.openUrl, let url = URL(string: raw) {
+            log.write("opening url \(raw) attempt=\(attempt)")
+            NSWorkspace.shared.open(url)
+            finish(reason: "url-opened")
+            return
+        } else {
+            log.write("target could not be located: \(request.targetBundleId)")
+            finish(reason: "no-target")
             return
         }
-        if let raw = request.openUrl, let url = URL(string: raw) {
-            log.write("opening url \(raw)")
-            NSWorkspace.shared.open(url)
+
+        // LaunchServices can be slow to hand focus over; retry briefly before quitting.
+        if attempt < activationAttempts {
+            Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { [weak self] _ in
+                self?.switchToTarget(reason: reason, attempt: attempt + 1)
+            }
+        } else {
+            finish(reason: "target-not-activated")
         }
     }
 
@@ -231,17 +279,16 @@ final class AttentionDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        openTarget()
-        finish(reason: "clicked")
-        return false
+        switchToTarget(reason: "dock-click")
+        return true
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        // Activating the beacon — a click on its Dock tile while it is not
+        // frontmost, a Cmd-Tab selection, or LaunchServices opening the app
+        // directly — always means "take me back to Harness".
         guard launched, !finished else { return }
-        // LaunchServices may activate a freshly launched app; ignore that first moment.
-        if Date().timeIntervalSince(readyAt) < 1.2 { return }
-        openTarget()
-        finish(reason: "activated")
+        switchToTarget(reason: "activated")
     }
 }
 
